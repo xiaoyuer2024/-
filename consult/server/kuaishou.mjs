@@ -2,7 +2,7 @@
 
 export const DEFAULT_ACTIVATE_URL = 'https://ad.partner.gifshow.com/track/activate'
 
-/** Official event: 付费. Amount required. */
+/** Official event: 付费（支付成功记一笔成交）. Amount required. */
 export const EVENT_PAY_SUCCESS = 3
 
 const MACRO = /^__+[A-Z0-9]+_*__$/i
@@ -52,6 +52,8 @@ export function parseClickQuery(search) {
   return {
     callback: extractCallback(get('callback', 'CALLBACK')),
     click_type: get('click_type'),
+    advertiser_id: get('advertiser_id', 'account_id'),
+    ks_user_id: get('ks_user_id', 'kid', 'kuaishou_id'),
     ip: get('ip'),
     ts: get('ts'),
     ua: get('ua'),
@@ -95,9 +97,10 @@ export function buildActivateUrl({
 export async function reportPaySuccess({
   activateUrl = DEFAULT_ACTIVATE_URL,
   callback,
+  eventType = EVENT_PAY_SUCCESS,
   eventTime = Date.now(),
   purchaseAmount,
-  dryRun = true,
+  dryRun = false,
   fetchImpl = fetch,
 }) {
   const token = extractCallback(callback)
@@ -106,14 +109,15 @@ export async function reportPaySuccess({
       ok: false,
       skipped: true,
       reason: 'missing_or_placeholder_callback',
-      event_type: EVENT_PAY_SUCCESS,
+      event_type: eventType,
+      message: '落地页 callback 仍是 __CALLBACK__ 或为空。请从快手广告真实点击进入后再测付费。',
     }
   }
 
   const url = buildActivateUrl({
     activateUrl,
     callback: token,
-    eventType: EVENT_PAY_SUCCESS,
+    eventType,
     eventTime,
     purchaseAmount,
   })
@@ -123,35 +127,54 @@ export async function reportPaySuccess({
       ok: true,
       dry_run: true,
       skipped: false,
-      event_type: EVENT_PAY_SUCCESS,
+      event_type: eventType,
       event_time: eventTime,
       purchase_amount: Number(purchaseAmount).toFixed(2),
       activate_url: url,
     }
   }
 
-  const response = await fetchImpl(url, { method: 'GET' })
-  const text = await response.text()
-  let parsed = null
   try {
-    parsed = JSON.parse(text)
-  } catch {
-    parsed = { raw: text }
-  }
+    const response = await fetchImpl(url, {
+      method: 'GET',
+      signal: AbortSignal.timeout(8000),
+    })
+    const text = await response.text()
+    let parsed = null
+    try {
+      parsed = JSON.parse(text)
+    } catch {
+      parsed = { raw: text }
+    }
 
-  const decodedFailed =
-    typeof text === 'string' && text.toLowerCase().includes('callbackinfo decoded')
+    const decodedFailed =
+      typeof text === 'string' && text.toLowerCase().includes('callbackinfo decoded')
+    const resultOk = parsed && typeof parsed === 'object' && Number(parsed.result) === 1
 
-  return {
-    ok: response.ok && !decodedFailed,
-    dry_run: false,
-    skipped: false,
-    event_type: EVENT_PAY_SUCCESS,
-    event_time: eventTime,
-    purchase_amount: Number(purchaseAmount).toFixed(2),
-    activate_url: url,
-    http_status: response.status,
-    kuaishou: parsed,
-    error_msg: decodedFailed ? 'callbackinfo decoded failure' : null,
+    return {
+      ok: response.ok && !decodedFailed && (resultOk || parsed?.result == null),
+      dry_run: false,
+      skipped: false,
+      event_type: eventType,
+      event_time: eventTime,
+      purchase_amount: Number(purchaseAmount).toFixed(2),
+      activate_url: url,
+      http_status: response.status,
+      kuaishou: parsed,
+      error_msg: decodedFailed
+        ? 'callbackinfo decoded failure：callback 不是快手点击下发的原值'
+        : null,
+    }
+  } catch (error) {
+    return {
+      ok: false,
+      dry_run: false,
+      skipped: false,
+      event_type: eventType,
+      event_time: eventTime,
+      purchase_amount: Number(purchaseAmount).toFixed(2),
+      activate_url: url,
+      error_msg: error instanceof Error ? error.message : '回传请求失败',
+    }
   }
 }

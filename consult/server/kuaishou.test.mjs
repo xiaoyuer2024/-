@@ -45,8 +45,12 @@ describe('parseClickQuery', () => {
     assert.equal(parsed.ip, '__IP__')
   })
 
-  it('treats unreplaced callback macro as missing', () => {
-    const parsed = parseClickQuery('callback=__CALLBACK__&cid=__CID__')
+  it('reads advertiser and kuaishou ids without treating an unreplaced callback as valid', () => {
+    const q =
+      'click_type=kuaishou&advertiser_id=121460078&ks_user_id=5712746951&callback=__CALLBACK__'
+    const parsed = parseClickQuery(q)
+    assert.equal(parsed.advertiser_id, '121460078')
+    assert.equal(parsed.ks_user_id, '5712746951')
     assert.equal(parsed.callback, null)
   })
 })

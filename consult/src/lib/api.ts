@@ -11,12 +11,14 @@ export type KuaishouReport = {
   skipped?: boolean
   dry_run?: boolean
   reason?: string
+  message?: string
   event_type?: number
   event_time?: number
   purchase_amount?: string
   activate_url?: string
   http_status?: number
   error_msg?: string | null
+  kuaishou?: { result?: number; error_msg?: string; raw?: string }
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -35,7 +37,14 @@ export const api = {
   health: () => request<{ ok: boolean; kuaishou_dry_run: boolean; payment_mode: string }>('/api/health'),
   product: () => request<Product>('/api/product'),
   trackClick: (search: string) =>
-    request<{ click_id: string; click: { has_callback: boolean } }>('/api/track/click', {
+    request<{
+      click_id: string
+      click: {
+        has_callback: boolean
+        advertiser_id?: string
+        ks_user_id?: string
+      }
+    }>('/api/track/click', {
       method: 'POST',
       body: JSON.stringify({ search, page_url: window.location.href }),
     }),

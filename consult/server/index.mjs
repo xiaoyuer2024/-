@@ -25,7 +25,7 @@ function loadEnv() {
 loadEnv()
 
 const PORT = Number(process.env.PORT || 8787)
-const DRY_RUN = String(process.env.KUAISHOU_DRY_RUN ?? 'true') !== 'false'
+const DRY_RUN = String(process.env.KUAISHOU_DRY_RUN ?? 'false') === 'true'
 const PAYMENT_MODE = process.env.PAYMENT_MODE || 'sandbox'
 const PRICE = Number(process.env.PRODUCT_PRICE || '9.90')
 const LIST_PRICE = Number(process.env.PRODUCT_LIST_PRICE || '68.00')
@@ -47,6 +47,8 @@ function publicClick(click) {
     id: click.id,
     has_callback: Boolean(click.callback),
     click_type: click.click_type,
+    advertiser_id: click.advertiser_id,
+    ks_user_id: click.ks_user_id,
     cid: click.cid,
     csite: click.csite,
     created_at: click.created_at,
@@ -61,6 +63,8 @@ app.get('/api/health', (_req, res) => {
     list_price: LIST_PRICE.toFixed(2),
     payment_mode: PAYMENT_MODE,
     kuaishou_dry_run: DRY_RUN,
+    kuaishou_event_type: 3,
+    kuaishou_event_name: '付费成交',
   })
 })
 
@@ -137,6 +141,8 @@ app.post('/api/orders', (req, res) => {
       list_price: LIST_PRICE.toFixed(2),
       payment_mode: PAYMENT_MODE,
       has_callback: Boolean(click?.callback),
+      advertiser_id: click?.advertiser_id || '',
+      ks_user_id: click?.ks_user_id || '',
     },
   })
 })
@@ -170,6 +176,17 @@ app.post('/api/orders/:id/pay', async (req, res) => {
     eventTime,
     purchaseAmount: order.amount,
     dryRun: DRY_RUN,
+  })
+  console.log('[clarum] kuaishou conversion', {
+    order_id: order.id,
+    advertiser_id: click?.advertiser_id,
+    ks_user_id: click?.ks_user_id,
+    has_callback: Boolean(click?.callback),
+    dry_run: DRY_RUN,
+    skipped: kuaishou.skipped,
+    ok: kuaishou.ok,
+    event_type: kuaishou.event_type,
+    error_msg: kuaishou.error_msg,
   })
 
   order.status = 'paid'

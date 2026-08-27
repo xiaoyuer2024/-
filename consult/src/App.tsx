@@ -34,6 +34,8 @@ export default function App() {
   const [product, setProduct] = useState<Product | null>(null)
   const [clickId, setClickId] = useState<string | null>(null)
   const [hasCallback, setHasCallback] = useState(false)
+  const [advertiserId, setAdvertiserId] = useState('')
+  const [ksUserId, setKsUserId] = useState('')
   const [topic, setTopic] = useState('intent')
   const [name, setName] = useState('')
   const [question, setQuestion] = useState('')
@@ -63,6 +65,8 @@ export default function App() {
         setProduct(p)
         setClickId(tracked.click_id)
         setHasCallback(Boolean(tracked.click.has_callback))
+        setAdvertiserId(tracked.click.advertiser_id || '')
+        setKsUserId(tracked.click.ks_user_id || '')
       } catch {
         if (!cancelled) setProduct({
           name: '澄室一对一情感咨询',
@@ -148,6 +152,11 @@ export default function App() {
           </div>
           <span className="hours">21:00 – 02:00 夜谈</span>
         </header>
+        <div className={classNames('track-bar', hasCallback ? 'ready' : 'warn')}>
+          {hasCallback
+            ? `已捕获快手 callback，测试付费成功后将回传成交（event_type=3）${advertiserId ? ` · 账户 ${advertiserId}` : ''}`
+            : '未捕获 callback：请从快手广告点击进入。当前若仍是 __CALLBACK__，付费后不会上报。'}
+        </div>
 
         {stage === 'home' && (
           <section className="panel home">
@@ -291,16 +300,18 @@ export default function App() {
               <p>微信支付 · 沙箱联调</p>
             </div>
             <ul className="pay-steps">
-              <li>正式环境将拉起微信/支付宝收银台</li>
-              <li>成功以支付通道异步通知为准</li>
-              <li>随后由服务端回传快手付费事件（event_type = 3）</li>
+              <li>点击「模拟支付成功」视为本笔测试成交</li>
+              <li>服务端立即向快手回传 event_type=3（付费成交）+ 实付金额</li>
+              <li>回传只使用落地页上的 callback，不使用账户 ID / 快手号</li>
             </ul>
             {error && <p className="err">{error}</p>}
             <button className="cta" disabled={busy} onClick={confirmPay}>
-              {busy ? '确认中…' : '模拟支付成功'}
+              {busy ? '回传中…' : '模拟支付成功并回传成交'}
             </button>
             <p className="fine">
-              {hasCallback ? '已捕获本次点击的 callback，支付后将用于回传。' : '当前链接没有有效 callback，回传会被跳过（避免伪造）。'}
+              {hasCallback
+                ? `已捕获 callback${ksUserId ? ` · 快手号 ${ksUserId}` : ''}，支付成功后会请求 track/activate。`
+                : '当前没有有效 callback。请用快手广告点开落地页（地址栏里 callback 不能是 __CALLBACK__）。'}
             </p>
           </section>
         )}
@@ -318,20 +329,21 @@ export default function App() {
               <p>{reading.practice}</p>
             </div>
             <div className={classNames('report', report?.ok && !report.skipped && 'ok', report?.skipped && 'skip')}>
-              <h4>快手付费回传</h4>
+              <h4>快手成交回传</h4>
               <p>
                 {report?.skipped
-                  ? '未回传：缺少真实 callback（宏未替换或未拼接）。'
+                  ? report.message ||
+                    '未回传：缺少真实 callback。请从快手广告点击进入，不要使用未替换的 __CALLBACK__。'
                   : report?.dry_run
-                    ? '已生成回传请求，当前为演练模式，未真正请求快手。'
+                    ? '仅生成了回传链接，未真正请求快手。请将 KUAISHOU_DRY_RUN 设为 false。'
                     : report?.ok
-                      ? '已向快手上报支付成功。'
-                      : '回传未成功，请查看服务端日志。'}
+                      ? '已向快手广告后台回传一笔付费成交（event_type=3）。'
+                      : report?.error_msg || '回传未成功。'}
               </p>
               <dl>
                 <div>
                   <dt>event_type</dt>
-                  <dd>{report?.event_type ?? 3} · 付费</dd>
+                  <dd>{report?.event_type ?? 3} · 付费成交</dd>
                 </div>
                 <div>
                   <dt>purchase_amount</dt>
@@ -341,7 +353,26 @@ export default function App() {
                   <dt>event_time</dt>
                   <dd>{report?.event_time ?? '—'}</dd>
                 </div>
+                {advertiserId ? (
+                  <div>
+                    <dt>advertiser_id</dt>
+                    <dd>{advertiserId}（仅对账，未传给快手）</dd>
+                  </div>
+                ) : null}
+                {report?.http_status ? (
+                  <div>
+                    <dt>http</dt>
+                    <dd>{report.http_status}</dd>
+                  </div>
+                ) : null}
+                {report?.kuaishou?.result != null ? (
+                  <div>
+                    <dt>快手 result</dt>
+                    <dd>{String(report.kuaishou.result)}</dd>
+                  </div>
+                ) : null}
               </dl>
+              {report?.activate_url ? <code className="activate">{report.activate_url}</code> : null}
             </div>
             <p className="fine">以上文本为结构化咨询回应，仅供自我觉察参考。</p>
           </section>
