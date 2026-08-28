@@ -21,19 +21,89 @@ export type KuaishouReport = {
   kuaishou?: { result?: number; error_msg?: string; raw?: string }
 }
 
+type PhpAct = { act: string; id?: string }
+
+function phpAct(path: string): PhpAct {
+  const pay = path.match(/^\/api\/orders\/([^/]+)\/(pay|replay-kuaishou)$/)
+  if (pay) {
+    return { act: pay[2] === 'pay' ? 'order_pay' : 'order_replay', id: pay[1] }
+  }
+  const table: Record<string, string> = {
+    '/api/health': 'health',
+    '/api/product': 'product',
+    '/api/track/click': 'track_click',
+    '/api/inquiries': 'inquiries',
+    '/api/orders': 'orders',
+  }
+  return { act: table[path] || 'unknown' }
+}
+
 function apiUrl(path: string): string {
   const prefix = import.meta.env.VITE_API_PREFIX || '/api'
   if (!prefix.includes('.php')) return path
-  const rest = path.replace(/^\/api/, '') || '/'
-  return `${prefix}?r=${encodeURIComponent(rest)}`
+  const { act, id } = phpAct(path)
+  const query = new URLSearchParams({ act })
+  if (id) query.set('id', id)
+  return `${prefix}?${query.toString()}`
+}
+
+function explainNonJson(text: string): string {
+  const php = text.match(/<b>(Fatal error|Warning|Parse error|Notice)<\/b>:\s*([^<\n]+)/i)
+  if (php) {
+    const detail = php[2].trim().slice(0, 180)
+    if (/permission denied|failed to open stream|不可写/i.test(detail)) {
+      return '服务器无法写入 data 目录。请在网站根目录执行 chmod -R 777 data 后重试。'
+    }
+    return `服务器 PHP 报错：${detail}`
+  }
+  if (/<br\s*\/?>/i.test(text)) {
+    return '接口返回了 PHP 错误页。请把 data 目录权限设为 777，并确认网站已启用 PHP。'
+  }
+  return '接口没有返回 JSON。请确认 api.php 在网站根目录，且网站类型为 PHP。'
+}
+
+function parsePayload(text: string): { message?: string; ok?: boolean } {
+  const trimmed = text.replace(/^\uFEFF/, '').trim()
+  if (!trimmed) throw new Error('接口没有返回内容')
+  try {
+    return JSON.parse(trimmed)
+  } catch {
+    const start = trimmed.indexOf('{')
+    const end = trimmed.lastIndexOf('}')
+    if (start >= 0 && end > start) {
+      try {
+        return JSON.parse(trimmed.slice(start, end + 1))
+      } catch {
+        /* fall through */
+      }
+    }
+    throw new Error(explainNonJson(trimmed))
+  }
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(apiUrl(path), {
-    headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
-    ...init,
-  })
-  const data = (await response.json()) as T & { message?: string; ok?: boolean }
+  const php = (import.meta.env.VITE_API_PREFIX || '').includes('.php')
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(init?.headers as Record<string, string> | undefined),
+  }
+  let body = init?.body
+  if (php && typeof body === 'string') {
+    try {
+      const parsed = JSON.parse(body) as Record<string, unknown>
+      const { act, id } = phpAct(path)
+      body = JSON.stringify({ _act: act, _id: id || '', ...parsed })
+    } catch {
+      /* keep original body */
+    }
+  } else if (php && !body && (init?.method || 'GET').toUpperCase() === 'POST') {
+    const { act, id } = phpAct(path)
+    body = JSON.stringify({ _act: act, _id: id || '' })
+  }
+
+  const response = await fetch(apiUrl(path), { ...init, headers, body })
+  const text = await response.text()
+  const data = parsePayload(text) as T & { message?: string; ok?: boolean }
   if (!response.ok) {
     throw new Error(data.message || '请求失败')
   }

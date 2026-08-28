@@ -13,28 +13,36 @@
   </head>
   <body>
     <h1>澄室接口检测</h1>
-    <p>打开本页后应看到 <code>ok: true</code>。若失败，检查网站是否启用 PHP，以及 <code>data</code> 目录是否可写。</p>
+    <p>打开本页后应看到 <code>ok: true</code>。若失败，检查网站是否启用 PHP，以及 <code>data</code> 目录是否可写（chmod 777）。</p>
     <p id="status">检测中…</p>
     <pre id="out"></pre>
     <script>
-      fetch('/api.php?r=/health')
+      function show(ok, text, extra) {
+        document.getElementById('out').textContent = extra ? extra + '\n\n' + text : text
+        document.getElementById('status').className = ok ? 'ok' : 'fail'
+        document.getElementById('status').textContent = ok
+          ? '接口正常，可以打开首页测试。'
+          : '接口异常：' + (extra || '网站可能未启用 PHP，或 data 目录不可写。')
+      }
+      fetch('/api.php?act=health')
         .then(function (r) { return r.text().then(function (t) { return { ok: r.ok, t: t } }) })
         .then(function (res) {
-          document.getElementById('out').textContent = res.t
           try {
-            var j = JSON.parse(res.t)
+            var start = res.t.indexOf('{')
+            var j = JSON.parse(start >= 0 ? res.t.slice(start) : res.t)
+            if (j.ok && j.data_writable === false) {
+              show(false, res.t, 'data 目录不可写，请执行 chmod -R 777 data')
+              return
+            }
             if (j.ok) {
-              document.getElementById('status').className = 'ok'
-              document.getElementById('status').textContent = '接口正常，可以打开首页测试。'
+              show(true, res.t)
               return
             }
           } catch (e) {}
-          document.getElementById('status').className = 'fail'
-          document.getElementById('status').textContent = '接口异常：网站可能未启用 PHP。'
+          show(false, res.t)
         })
         .catch(function (e) {
-          document.getElementById('status').className = 'fail'
-          document.getElementById('status').textContent = '请求失败：' + e
+          show(false, String(e))
         })
     </script>
   </body>
