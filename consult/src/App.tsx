@@ -4,6 +4,10 @@ import { COUNSELORS, TOPICS, matchCounselor, writeReading } from './lib/reading'
 
 type Stage = 'home' | 'compose' | 'matching' | 'offer' | 'pay' | 'reading'
 
+function classNames(...parts: Array<string | false | undefined>) {
+  return parts.filter(Boolean).join(' ')
+}
+
 function conversionVerdict(report: KuaishouReport | null) {
   if (!report) {
     return { tone: 'skip' as const, title: '尚未回传', hint: '请先完成模拟支付。' }
