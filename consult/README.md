@@ -37,6 +37,16 @@ https://ad.partner.gifshow.com/track/activate?callback=__CALLBACK__&event_type=3
 
 `advertiser_id=121460078`、`ks_user_id=5712746951` 只用于你们自己对账，不要接到 `track/activate` 上。
 
+## 上传到服务器测试
+
+```bash
+cd consult
+npm install
+npm run pack
+```
+
+生成 `clarum-kuaishou-upload.zip`。解压后把 `index.html`、`api.php`、`assets/`、`data/` 放到 `https://higci01.gxtengsou.cn/` 网站根目录。需要 PHP 7.4+（开启 curl），并把 `data` 设为可写。先打开 `/check.html` 确认接口 `ok: true`。
+
 ## 本地运行
 
 ```bash

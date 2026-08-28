@@ -1,0 +1,50 @@
+澄室 · 上传后即可测试
+
+【必须这样传】
+把压缩包解压后的文件，全部放到网站根目录。
+解压后第一层就要能看到：
+  index.html
+  api.php
+  check.html
+  assets/
+  data/
+不要把它们再套一层文件夹。
+
+目标域名：https://higci01.gxtengsou.cn/
+
+【服务器要求】
+- PHP 7.4 或以上（宝塔网站类型选 PHP）
+- 开启 curl 或 allow_url_fopen
+- data 目录可写：chmod -R 777 data
+
+本包接口走 api.php，一般不需要改伪静态。
+
+【上传后先检测】
+1. https://higci01.gxtengsou.cn/check.html
+   应显示 ok: true
+2. https://higci01.gxtengsou.cn/api.php?r=/health
+   应返回 JSON，含 "ok": true
+3. 打开首页 https://higci01.gxtengsou.cn/
+   点「测试成交回传」可走完模拟支付。
+   若地址栏 callback 仍是 __CALLBACK__，结果页会提示没有真实 callback，这是正常的。
+
+【快手广告落地页（整段复制）】
+https://higci01.gxtengsou.cn/?click_type=kuaishou&advertiser_id=121460078&ks_user_id=5712746951&ip=__IP__&ts=__TS__&ua=__UA__&os=__OS__&cid=__CID__&csite=__CSITE__&oaid=__OAID2__&imei_md5=__IMEI2__&android_id_md5=__ANDROIDID2__&idfa=__IDFA2__&callback=__CALLBACK__
+
+必须从快手广告（或官方联调）点进去，callback 变成一长串后，再点「测试成交回传」→「模拟支付成功并回传成交」。
+结果页三步都绿、快手 result=1，即链路正常。
+
+付费成功后服务端会请求：
+https://ad.partner.gifshow.com/track/activate?callback=真实callback&event_type=3&event_time=毫秒时间戳&purchase_amount=9.90
+
+【若 check.html 失败】
+- 宝塔：网站改为 PHP 项目，运行目录=网站根目录
+- 确认 api.php 在根目录，不要只上传了 consult 文件夹
+- data 目录权限 777
+- 若坚持用 Nginx 把 /api/ 转到 PHP，可参考 nginx.conf.example（可选）
+
+【没有 PHP、要用 Node 时】
+进入包内 node-server：
+  npm install --omit=dev
+  NODE_ENV=production node server/index.mjs
+再把网站反代到本机 8787 端口。

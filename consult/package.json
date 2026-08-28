@@ -10,6 +10,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "node --test server/kuaishou.test.mjs",
+    "pack": "bash scripts/pack-upload.sh",
     "start": "NODE_ENV=production node server/index.mjs"
   },
   "dependencies": {

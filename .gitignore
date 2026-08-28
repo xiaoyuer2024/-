@@ -16,6 +16,9 @@ docs
 dist-ssr
 *.local
 
+# Generated upload zip
+clarum-kuaishou-upload.zip
+
 # Local editor/tooling config.
 .claude/
 

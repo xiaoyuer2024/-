@@ -21,8 +21,15 @@ export type KuaishouReport = {
   kuaishou?: { result?: number; error_msg?: string; raw?: string }
 }
 
+function apiUrl(path: string): string {
+  const prefix = import.meta.env.VITE_API_PREFIX || '/api'
+  if (!prefix.includes('.php')) return path
+  const rest = path.replace(/^\/api/, '') || '/'
+  return `${prefix}?r=${encodeURIComponent(rest)}`
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
+  const response = await fetch(apiUrl(path), {
     headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
     ...init,
   })

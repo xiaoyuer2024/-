@@ -1,0 +1,26 @@
+# 可选。本包默认走 /api.php?r=...，不改伪静态也能测。
+# 仅当你希望 /api/health 这种路径也可用时，再贴进宝塔 Nginx 配置。
+
+server {
+    listen 80;
+    listen 443 ssl http2;
+    server_name higci01.gxtengsou.cn;
+    root /www/wwwroot/higci01.gxtengsou.cn;
+    index index.html;
+
+    location ^~ /data/ {
+        deny all;
+    }
+
+    location /api/ {
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME $document_root/api.php;
+        fastcgi_param SCRIPT_NAME /api.php;
+        # 宝塔 PHP 套接字按实际版本改，常见还有 unix:/tmp/php-cgi-80.sock
+        fastcgi_pass unix:/tmp/php-cgi-74.sock;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

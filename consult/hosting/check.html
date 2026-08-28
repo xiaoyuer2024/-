@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>澄室接口检测</title>
+    <style>
+      body { font: 16px/1.6 sans-serif; background: #111827; color: #f9fafb; padding: 24px; }
+      pre { white-space: pre-wrap; background: #0b1220; padding: 16px; border-radius: 8px; }
+      .ok { color: #34d399; }
+      .fail { color: #f87171; }
+    </style>
+  </head>
+  <body>
+    <h1>澄室接口检测</h1>
+    <p>打开本页后应看到 <code>ok: true</code>。若失败，检查网站是否启用 PHP，以及 <code>data</code> 目录是否可写。</p>
+    <p id="status">检测中…</p>
+    <pre id="out"></pre>
+    <script>
+      fetch('/api.php?r=/health')
+        .then(function (r) { return r.text().then(function (t) { return { ok: r.ok, t: t } }) })
+        .then(function (res) {
+          document.getElementById('out').textContent = res.t
+          try {
+            var j = JSON.parse(res.t)
+            if (j.ok) {
+              document.getElementById('status').className = 'ok'
+              document.getElementById('status').textContent = '接口正常，可以打开首页测试。'
+              return
+            }
+          } catch (e) {}
+          document.getElementById('status').className = 'fail'
+          document.getElementById('status').textContent = '接口异常：网站可能未启用 PHP。'
+        })
+        .catch(function (e) {
+          document.getElementById('status').className = 'fail'
+          document.getElementById('status').textContent = '请求失败：' + e
+        })
+    </script>
+  </body>
+</html>
