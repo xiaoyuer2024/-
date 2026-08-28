@@ -43,9 +43,13 @@ app.use(express.json({ limit: '32kb' }))
 
 function publicClick(click) {
   if (!click) return null
+  const token = click.callback || ''
   return {
     id: click.id,
     has_callback: Boolean(click.callback),
+    callback_preview: token
+      ? `${token.slice(0, 10)}…${token.slice(-6)}（${token.length}字）`
+      : '',
     click_type: click.click_type,
     advertiser_id: click.advertiser_id,
     ks_user_id: click.ks_user_id,
@@ -199,7 +203,35 @@ app.post('/api/orders/:id/pay', async (req, res) => {
     order,
     inquiry,
     kuaishou,
+    click: publicClick(click),
   })
+})
+
+app.post('/api/orders/:id/replay-kuaishou', async (req, res) => {
+  const order = orders.get(req.params.id)
+  if (!order) return res.status(404).json({ ok: false, message: '订单不存在' })
+  if (order.status !== 'paid') {
+    return res.status(400).json({ ok: false, message: '请先完成模拟支付' })
+  }
+  const inquiry = inquiries.get(order.inquiry_id)
+  const click = inquiry?.click_id ? clicks.get(inquiry.click_id) : null
+  const eventTime = Date.now()
+  const kuaishou = await reportPaySuccess({
+    activateUrl: ACTIVATE_URL,
+    callback: click?.callback,
+    eventTime,
+    purchaseAmount: order.amount,
+    dryRun: DRY_RUN,
+  })
+  order.kuaishou = kuaishou
+  orders.set(order.id, order)
+  console.log('[clarum] kuaishou replay', {
+    order_id: order.id,
+    skipped: kuaishou.skipped,
+    ok: kuaishou.ok,
+    error_msg: kuaishou.error_msg,
+  })
+  res.json({ ok: true, order, inquiry, kuaishou, click: publicClick(click) })
 })
 
 if (process.env.NODE_ENV === 'production') {

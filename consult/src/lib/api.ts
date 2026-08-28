@@ -41,6 +41,7 @@ export const api = {
       click_id: string
       click: {
         has_callback: boolean
+        callback_preview?: string
         advertiser_id?: string
         ks_user_id?: string
       }
@@ -56,7 +57,13 @@ export const api = {
   createOrder: (inquiry_id: string) =>
     request<{
       order_id: string
-      order: { amount: string; list_price: string; product_name: string; payment_mode: string; has_callback: boolean }
+      order: {
+        amount: string
+        list_price: string
+        product_name: string
+        payment_mode: string
+        has_callback: boolean
+      }
     }>('/api/orders', {
       method: 'POST',
       body: JSON.stringify({ inquiry_id }),
@@ -68,4 +75,10 @@ export const api = {
       inquiry: { question: string; topic: string; name: string }
       kuaishou: KuaishouReport
     }>(`/api/orders/${order_id}/pay`, { method: 'POST' }),
+  replayKuaishou: (order_id: string) =>
+    request<{
+      ok: boolean
+      order: { id: string; amount: string; paid_at: string; status: string }
+      kuaishou: KuaishouReport
+    }>(`/api/orders/${order_id}/replay-kuaishou`, { method: 'POST' }),
 }

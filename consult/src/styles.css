@@ -145,6 +145,12 @@ h2 { font-size: 24px; }
   cursor: pointer;
 }
 .cta:disabled { opacity: 0.6; cursor: wait; }
+.cta.ghost {
+  margin-top: 10px;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--gold-2);
+}
 
 .back {
   background: none;
@@ -260,6 +266,38 @@ blockquote {
 }
 .report.ok { border-color: rgba(143, 202, 160, 0.45); }
 .report.skip { border-color: rgba(224, 122, 122, 0.35); }
+.verdict {
+  margin: 0 0 16px;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+}
+.verdict.ok { border-color: rgba(143, 202, 160, 0.5); background: rgba(143, 202, 160, 0.1); }
+.verdict.skip { border-color: rgba(224, 122, 122, 0.4); background: rgba(224, 122, 122, 0.08); }
+.verdict strong { display: block; font-family: var(--serif); font-size: 20px; margin-bottom: 6px; }
+.verdict p { margin: 0; color: var(--mute); font-size: 13px; line-height: 1.6; }
+.chain {
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+}
+.chain li {
+  margin-bottom: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+}
+.chain li.pass { border-color: rgba(143, 202, 160, 0.4); }
+.chain li.fail { border-color: rgba(224, 122, 122, 0.35); }
+.chain b { display: block; margin-bottom: 4px; font-size: 13px; }
+.chain span { color: var(--mute); font-size: 12px; line-height: 1.5; word-break: break-all; }
+.label {
+  display: block;
+  margin: 12px 0 6px;
+  color: var(--gold);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+}
 .report h4 { margin: 0 0 8px; font-family: var(--serif); }
 .report p { margin: 0 0 10px; color: var(--mute); font-size: 13px; }
 .report dl { margin: 0; display: grid; gap: 8px; }

@@ -4,8 +4,43 @@ import { COUNSELORS, TOPICS, matchCounselor, writeReading } from './lib/reading'
 
 type Stage = 'home' | 'compose' | 'matching' | 'offer' | 'pay' | 'reading'
 
-function classNames(...parts: Array<string | false | undefined>) {
-  return parts.filter(Boolean).join(' ')
+function conversionVerdict(report: KuaishouReport | null) {
+  if (!report) {
+    return { tone: 'skip' as const, title: '尚未回传', hint: '请先完成模拟支付。' }
+  }
+  if (report.skipped) {
+    return {
+      tone: 'skip' as const,
+      title: '链路中断：没有真实 callback',
+      hint: '必须从快手广告点击进入本页，地址栏 callback 不能是 __CALLBACK__。',
+    }
+  }
+  if (report.dry_run) {
+    return {
+      tone: 'skip' as const,
+      title: '演练模式：没有真正请求快手',
+      hint: '把 KUAISHOU_DRY_RUN 设为 false 后重试。',
+    }
+  }
+  if (report.ok && Number(report.kuaishou?.result) === 1) {
+    return {
+      tone: 'ok' as const,
+      title: '链路正常：快手已接收成交',
+      hint: '可到磁力引擎转化明细核对此 callback 的付费事件。',
+    }
+  }
+  if (report.ok) {
+    return {
+      tone: 'ok' as const,
+      title: '已向快手发出成交回传',
+      hint: '请对照下方原始返回。result=1 才表示后台认了这笔。',
+    }
+  }
+  return {
+    tone: 'skip' as const,
+    title: '已请求，但快手未确认成交',
+    hint: report.error_msg || report.kuaishou?.error_msg || '检查 callback 是否为点击下发的原值。',
+  }
 }
 
 function PayQr({ seed }: { seed: string }) {
@@ -34,8 +69,10 @@ export default function App() {
   const [product, setProduct] = useState<Product | null>(null)
   const [clickId, setClickId] = useState<string | null>(null)
   const [hasCallback, setHasCallback] = useState(false)
+  const [callbackPreview, setCallbackPreview] = useState('')
   const [advertiserId, setAdvertiserId] = useState('')
   const [ksUserId, setKsUserId] = useState('')
+  const [testMode, setTestMode] = useState(false)
   const [topic, setTopic] = useState('intent')
   const [name, setName] = useState('')
   const [question, setQuestion] = useState('')
@@ -65,6 +102,7 @@ export default function App() {
         setProduct(p)
         setClickId(tracked.click_id)
         setHasCallback(Boolean(tracked.click.has_callback))
+        setCallbackPreview(tracked.click.callback_preview || '')
         setAdvertiserId(tracked.click.advertiser_id || '')
         setKsUserId(tracked.click.ks_user_id || '')
       } catch {
@@ -123,6 +161,34 @@ export default function App() {
     }
   }
 
+  async function startConversionTest() {
+    setError('')
+    setBusy(true)
+    setTestMode(true)
+    setAgreed(true)
+    setTopic('intent')
+    setQuestion('联调测试：模拟付费成功后回传快手成交。')
+    setName('联调')
+    try {
+      const created = await api.createInquiry({
+        click_id: clickId,
+        topic: 'intent',
+        question: '联调测试：模拟付费成功后回传快手成交。',
+        name: '联调',
+      })
+      setInquiryId(created.inquiry_id)
+      const order = await api.createOrder(created.inquiry_id)
+      setOrderId(order.order_id)
+      setPaidAmount(order.order.amount)
+      setHasCallback(order.order.has_callback)
+      setStage('pay')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '无法开始联调')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function confirmPay() {
     if (!orderId) return
     setError('')
@@ -134,6 +200,20 @@ export default function App() {
       setStage('reading')
     } catch (err) {
       setError(err instanceof Error ? err.message : '支付确认失败')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function replayConversion() {
+    if (!orderId) return
+    setError('')
+    setBusy(true)
+    try {
+      const paid = await api.replayKuaishou(orderId)
+      setReport(paid.kuaishou)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '重新回传失败')
     } finally {
       setBusy(false)
     }
@@ -188,7 +268,13 @@ export default function App() {
               <button className="cta" onClick={() => setStage('compose')}>
                 写下心事
               </button>
-              <p className="fine">服务仅供自我觉察与情绪梳理参考，不构成心理治疗或任何决策依据。</p>
+              <button className="cta ghost" disabled={busy} onClick={startConversionTest}>
+                {busy ? '准备中…' : '测试成交回传'}
+              </button>
+              {error && <p className="err">{error}</p>}
+              <p className="fine">
+                「测试成交回传」会跳过咨询文案，直接模拟付费并检查快手 track/activate 是否收到 event_type=3。
+              </p>
             </div>
           </section>
         )}
@@ -286,7 +372,7 @@ export default function App() {
 
         {stage === 'pay' && (
           <section className="panel pay">
-            <button className="back" onClick={() => setStage('offer')}>
+            <button className="back" onClick={() => setStage(testMode ? 'home' : 'offer')}>
               返回
             </button>
             <h2>完成支付</h2>
@@ -316,65 +402,127 @@ export default function App() {
           </section>
         )}
 
-        {stage === 'reading' && reading && (
+        {stage === 'reading' && (
           <section className="panel reading">
-            <p className="eyebrow">咨询已解锁</p>
-            <h2>{reading.close}</h2>
-            <p className="lead">{reading.lead}</p>
-            {reading.body.map((p) => (
-              <p key={p}>{p}</p>
-            ))}
-            <div className="practice">
-              <span>今晚的练习</span>
-              <p>{reading.practice}</p>
-            </div>
-            <div className={classNames('report', report?.ok && !report.skipped && 'ok', report?.skipped && 'skip')}>
-              <h4>快手成交回传</h4>
-              <p>
-                {report?.skipped
-                  ? report.message ||
-                    '未回传：缺少真实 callback。请从快手广告点击进入，不要使用未替换的 __CALLBACK__。'
-                  : report?.dry_run
-                    ? '仅生成了回传链接，未真正请求快手。请将 KUAISHOU_DRY_RUN 设为 false。'
-                    : report?.ok
-                      ? '已向快手广告后台回传一笔付费成交（event_type=3）。'
-                      : report?.error_msg || '回传未成功。'}
-              </p>
-              <dl>
-                <div>
-                  <dt>event_type</dt>
-                  <dd>{report?.event_type ?? 3} · 付费成交</dd>
-                </div>
-                <div>
-                  <dt>purchase_amount</dt>
-                  <dd>{report?.purchase_amount || paidAmount}</dd>
-                </div>
-                <div>
-                  <dt>event_time</dt>
-                  <dd>{report?.event_time ?? '—'}</dd>
-                </div>
-                {advertiserId ? (
-                  <div>
-                    <dt>advertiser_id</dt>
-                    <dd>{advertiserId}（仅对账，未传给快手）</dd>
+            {(() => {
+              const verdict = conversionVerdict(report)
+              const sent = Boolean(report && !report.skipped)
+              const accepted = Boolean(report?.ok && Number(report.kuaishou?.result) === 1)
+              return (
+                <>
+                  <p className="eyebrow">模拟成交联调</p>
+                  <div className={classNames('verdict', verdict.tone)}>
+                    <strong>{verdict.title}</strong>
+                    <p>{verdict.hint}</p>
                   </div>
-                ) : null}
-                {report?.http_status ? (
-                  <div>
-                    <dt>http</dt>
-                    <dd>{report.http_status}</dd>
+                  <ol className="chain">
+                    <li className={hasCallback ? 'pass' : 'fail'}>
+                      <b>1. 落地页捕获 callback</b>
+                      <span>
+                        {hasCallback
+                          ? callbackPreview || '已捕获'
+                          : '未捕获。请用快手广告点开 https://higci01.gxtengsou.cn'}
+                      </span>
+                    </li>
+                    <li className={sent ? 'pass' : 'fail'}>
+                      <b>2. 请求快手 track/activate</b>
+                      <span>
+                        {report?.skipped
+                          ? '已跳过，没有把假 callback 发给快手'
+                          : report?.dry_run
+                            ? '只生成了链接，未真正请求'
+                            : report?.activate_url
+                              ? '已发出 GET 回传'
+                              : '尚未发出'}
+                      </span>
+                    </li>
+                    <li className={accepted ? 'pass' : sent && report?.ok ? 'pass' : 'fail'}>
+                      <b>3. 快手后台确认成交</b>
+                      <span>
+                        {accepted
+                          ? 'result=1，快手已接收 event_type=3'
+                          : report?.kuaishou
+                            ? `返回 ${JSON.stringify(report.kuaishou)}`
+                            : report?.error_msg || '尚无快手返回'}
+                      </span>
+                    </li>
+                  </ol>
+                  <div className={classNames('report', verdict.tone === 'ok' && 'ok', verdict.tone === 'skip' && 'skip')}>
+                    <h4>本次回传参数</h4>
+                    <dl>
+                      <div>
+                        <dt>event_type</dt>
+                        <dd>{report?.event_type ?? 3} · 付费成交</dd>
+                      </div>
+                      <div>
+                        <dt>purchase_amount</dt>
+                        <dd>{report?.purchase_amount || paidAmount}</dd>
+                      </div>
+                      <div>
+                        <dt>event_time</dt>
+                        <dd>{report?.event_time ?? '—'}</dd>
+                      </div>
+                      <div>
+                        <dt>callback</dt>
+                        <dd>{callbackPreview || '无'}</dd>
+                      </div>
+                      {advertiserId ? (
+                        <div>
+                          <dt>advertiser_id</dt>
+                          <dd>{advertiserId}（仅对账）</dd>
+                        </div>
+                      ) : null}
+                      {ksUserId ? (
+                        <div>
+                          <dt>ks_user_id</dt>
+                          <dd>{ksUserId}（仅对账）</dd>
+                        </div>
+                      ) : null}
+                      {report?.http_status ? (
+                        <div>
+                          <dt>HTTP</dt>
+                          <dd>{report.http_status}</dd>
+                        </div>
+                      ) : null}
+                    </dl>
+                    {report?.activate_url ? (
+                      <>
+                        <span className="label">实际请求</span>
+                        <code className="activate">{report.activate_url}</code>
+                      </>
+                    ) : null}
+                    {report?.kuaishou ? (
+                      <>
+                        <span className="label">快手原始返回</span>
+                        <code className="activate">{JSON.stringify(report.kuaishou)}</code>
+                      </>
+                    ) : null}
                   </div>
-                ) : null}
-                {report?.kuaishou?.result != null ? (
-                  <div>
-                    <dt>快手 result</dt>
-                    <dd>{String(report.kuaishou.result)}</dd>
-                  </div>
-                ) : null}
-              </dl>
-              {report?.activate_url ? <code className="activate">{report.activate_url}</code> : null}
-            </div>
-            <p className="fine">以上文本为结构化咨询回应，仅供自我觉察参考。</p>
+                  {error && <p className="err">{error}</p>}
+                  <button className="cta" disabled={busy} onClick={replayConversion}>
+                    {busy ? '回传中…' : '重新向快手回传成交'}
+                  </button>
+                  <button
+                    className="cta ghost"
+                    onClick={() => {
+                      setStage('home')
+                      setReport(null)
+                      setTestMode(false)
+                    }}
+                  >
+                    返回首页
+                  </button>
+                  {reading && !testMode ? (
+                    <div className="practice">
+                      <span>咨询摘要</span>
+                      <p>
+                        {reading.close}：{reading.lead}
+                      </p>
+                    </div>
+                  ) : null}
+                </>
+              )
+            })()}
           </section>
         )}
 
