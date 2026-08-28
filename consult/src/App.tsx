@@ -174,8 +174,14 @@ export default function App() {
     setQuestion('联调测试：模拟付费成功后回传快手成交。')
     setName('联调')
     try {
+      const tracked = await api.trackClick(window.location.search)
+      setClickId(tracked.click_id)
+      setHasCallback(Boolean(tracked.click.has_callback))
+      setCallbackPreview(tracked.click.callback_preview || '')
+      setAdvertiserId(tracked.click.advertiser_id || '')
+      setKsUserId(tracked.click.ks_user_id || '')
       const created = await api.createInquiry({
-        click_id: clickId,
+        click_id: tracked.click_id,
         topic: 'intent',
         question: '联调测试：模拟付费成功后回传快手成交。',
         name: '联调',

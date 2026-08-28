@@ -148,9 +148,9 @@ function empty_store() {
 function data_candidates() {
     $tmp = rtrim(sys_get_temp_dir(), '/\\');
     return [
-        __DIR__ . '/data/store.php',
-        __DIR__ . '/clarum-store.php',
-        $tmp . '/clarum-store.php',
+        __DIR__ . '/data/store.json',
+        __DIR__ . '/clarum-store.json',
+        $tmp . '/clarum-' . md5(__DIR__) . '-store.json',
     ];
 }
 
@@ -163,10 +163,6 @@ function data_file() {
             @mkdir($dir, 0777, true);
         }
         @chmod($dir, 0777);
-        if (is_file($file) && is_readable($file)) {
-            $chosen = $file;
-            return $chosen;
-        }
         if (is_dir($dir) && is_writable($dir)) {
             $probe = $dir . '/.clarum-write';
             if (@file_put_contents($probe, '1') !== false) {
@@ -180,19 +176,38 @@ function data_file() {
     return $chosen;
 }
 
+function read_store_file($file) {
+    if (!is_file($file)) return null;
+    $raw = @file_get_contents($file);
+    if (!is_string($raw) || trim($raw) === '') return null;
+    if (strpos($raw, '<?php') === 0) {
+        $data = @include $file;
+        return is_array($data) ? $data : null;
+    }
+    $json = json_decode($raw, true);
+    return is_array($json) ? $json : null;
+}
+
+function merge_stores($base, $extra) {
+    $out = empty_store();
+    foreach (['clicks', 'inquiries', 'orders'] as $key) {
+        $out[$key] = array_merge(
+            is_array($base[$key] ?? null) ? $base[$key] : [],
+            is_array($extra[$key] ?? null) ? $extra[$key] : []
+        );
+    }
+    return $out;
+}
+
 function load_store() {
-    foreach (data_candidates() as $file) {
-        if (is_file($file)) {
-            $data = @include $file;
-            if (is_array($data)) return $data;
-        }
+    $merged = empty_store();
+    $files = data_candidates();
+    $files[] = __DIR__ . '/data/store.php';
+    foreach ($files as $file) {
+        $data = read_store_file($file);
+        if ($data) $merged = merge_stores($merged, $data);
     }
-    $legacy = __DIR__ . '/data/store.json';
-    if (is_file($legacy)) {
-        $json = json_decode((string)@file_get_contents($legacy), true);
-        if (is_array($json)) return $json;
-    }
-    return empty_store();
+    return $merged;
 }
 
 function save_store($store) {
@@ -202,11 +217,33 @@ function save_store($store) {
         @mkdir($dir, 0777, true);
     }
     @chmod($dir, 0777);
-    $export = var_export($store, true);
-    $ok = @file_put_contents($file, "<?php\nreturn {$export};\n", LOCK_EX);
-    if ($ok === false) {
+    $fp = @fopen($file, 'c+');
+    if ($fp === false) {
         json_out(['ok' => false, 'message' => 'data 目录不可写。请在网站根目录执行 chmod -R 777 data'], 500);
     }
+    @flock($fp, LOCK_EX);
+    rewind($fp);
+    $raw = stream_get_contents($fp);
+    $latest = empty_store();
+    if (is_string($raw) && trim($raw) !== '') {
+        $parsed = json_decode($raw, true);
+        if (is_array($parsed)) $latest = $parsed;
+    }
+    foreach (data_candidates() as $other) {
+        if ($other === $file) continue;
+        $extra = read_store_file($other);
+        if ($extra) $latest = merge_stores($latest, $extra);
+    }
+    $legacy = read_store_file(__DIR__ . '/data/store.php');
+    if ($legacy) $latest = merge_stores($latest, $legacy);
+    $merged = merge_stores($latest, $store);
+    $json = json_encode($merged, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    rewind($fp);
+    ftruncate($fp, 0);
+    fwrite($fp, $json);
+    fflush($fp);
+    @flock($fp, LOCK_UN);
+    fclose($fp);
 }
 
 function data_writable() {
