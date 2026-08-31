@@ -1,0 +1,52 @@
+澄室 · 上传后即可测试
+
+【必须这样传】
+把压缩包解压后的文件，全部放到网站根目录。
+解压后第一层就要能看到：
+  index.html
+  api.php
+  check.html
+  assets/
+  data/
+不要把它们再套一层文件夹。
+
+目标域名：https://higci01.gxtengsou.cn/
+
+【服务器要求】
+- PHP 7.4 或以上（宝塔网站类型选 PHP）
+- 开启 curl 或 allow_url_fopen
+- data 目录可写：在网站根目录执行
+  chmod -R 777 data
+
+本包接口走 /api.php?act=health 这种参数，一般不需要改伪静态。
+
+【上传后先检测】
+1. https://higci01.gxtengsou.cn/check.html
+   应显示 ok: true
+2. https://higci01.gxtengsou.cn/api.php?act=health
+   应返回 JSON，含 "ok": true
+   若 data_writable 为 false，先执行 chmod -R 777 data
+3. 打开首页 https://higci01.gxtengsou.cn/
+   点「测试成交回传」可走完模拟支付。
+   若地址栏 callback 仍是 __CALLBACK__，结果页会提示没有真实 callback，这是正常的。
+
+【若出现 Unexpected token '<' 或 br / b 报错】
+这是 PHP 警告页被当成 JSON 了。按下面处理后再强制刷新（Ctrl+F5）：
+- 确认 api.php 在网站根目录
+- chmod -R 777 data
+- 宝塔网站类型必须是 PHP，不要用纯静态
+- 上传本包覆盖旧的 api.php 和 assets
+
+【快手广告落地页（视频流 / 信息流，整段复制）】
+https://higci01.gxtengsou.cn/?utm_source=kuaishou&advertiser_id=121460078&ks_user_id=5712746951&aid=__AID__&cid=__CID__&did=__DID__&dname=__Dname__&callback=__CALLBACK__
+
+客户从快手视频点进来后，页面会保存 callback。付费成功后服务端回传：
+https://ad.partner.gifshow.com/track/activate?callback=真实callback&event_type=3&event_time=毫秒时间戳&purchase_amount=9.90
+
+投放联调请打开：https://higci01.gxtengsou.cn/?debug=1
+
+【没有 PHP、要用 Node 时】
+进入包内 node-server：
+  npm install --omit=dev
+  NODE_ENV=production node server/index.mjs
+再把网站反代到本机 8787 端口。
