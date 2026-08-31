@@ -45,6 +45,16 @@ describe('parseClickQuery', () => {
     assert.equal(parsed.ip, '__IP__')
   })
 
+  it('reads callback from a full video-feed landing URL', () => {
+    const q =
+      'https://higci01.gxtengsou.cn/?utm_source=kuaishou&aid=11&cid=22&did=33&dname=plan&callback=LiveFromFeed'
+    const parsed = parseClickQuery(q)
+    assert.equal(parsed.callback, 'LiveFromFeed')
+    assert.equal(parsed.aid, '11')
+    assert.equal(parsed.cid, '22')
+    assert.equal(parsed.utm_source, 'kuaishou')
+  })
+
   it('reads advertiser and kuaishou ids without treating an unreplaced callback as valid', () => {
     const q =
       'click_type=kuaishou&advertiser_id=121460078&ks_user_id=5712746951&callback=__CALLBACK__'

@@ -84,13 +84,26 @@ app.get('/api/product', (_req, res) => {
 
 app.post('/api/track/click', (req, res) => {
   const search = req.body?.search || ''
+  const pageUrl = req.body?.page_url || ''
   const parsed = parseClickQuery(search)
+  const fromPage = parseClickQuery(pageUrl)
+  const cookieHeader = String(req.headers.cookie || '')
+  const cookieMatch = cookieHeader.match(/(?:^|;\s*)clarum_cb=([^;]+)/)
+  const cookieCb = cookieMatch ? decodeURIComponent(cookieMatch[1]) : ''
+  const clickData = {
+    ...fromPage,
+    ...parsed,
+    callback: parsed.callback || fromPage.callback || parseClickQuery(`callback=${cookieCb}`).callback,
+  }
   const id = randomUUID()
   const click = {
     id,
-    ...parsed,
-    page_url: req.body?.page_url || '',
+    ...clickData,
+    page_url: pageUrl,
     created_at: new Date().toISOString(),
+  }
+  if (click.callback) {
+    res.setHeader('Set-Cookie', `clarum_cb=${encodeURIComponent(click.callback)}; Path=/; Max-Age=86400; SameSite=Lax`)
   }
   clicks.set(id, click)
   res.json({ click_id: id, click: publicClick(click) })

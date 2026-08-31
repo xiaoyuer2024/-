@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api, type KuaishouReport, type Product } from './lib/api'
+import { collectClickSearch, isDebugLanding } from './lib/click'
 import { COUNSELORS, TOPICS, matchCounselor, writeReading } from './lib/reading'
 
 type Stage = 'home' | 'compose' | 'matching' | 'offer' | 'pay' | 'reading'
@@ -76,6 +77,7 @@ export default function App() {
   const [callbackPreview, setCallbackPreview] = useState('')
   const [advertiserId, setAdvertiserId] = useState('')
   const [ksUserId, setKsUserId] = useState('')
+  const [debugMode] = useState(() => isDebugLanding())
   const [testMode, setTestMode] = useState(false)
   const [topic, setTopic] = useState('intent')
   const [name, setName] = useState('')
@@ -100,7 +102,7 @@ export default function App() {
       try {
         const [p, tracked] = await Promise.all([
           api.product(),
-          api.trackClick(window.location.search),
+          api.trackClick(collectClickSearch()),
         ])
         if (cancelled) return
         setProduct(p)
@@ -174,7 +176,7 @@ export default function App() {
     setQuestion('联调测试：模拟付费成功后回传快手成交。')
     setName('联调')
     try {
-      const tracked = await api.trackClick(window.location.search)
+      const tracked = await api.trackClick(collectClickSearch())
       setClickId(tracked.click_id)
       setHasCallback(Boolean(tracked.click.has_callback))
       setCallbackPreview(tracked.click.callback_preview || '')
@@ -242,11 +244,13 @@ export default function App() {
           </div>
           <span className="hours">21:00 – 02:00 夜谈</span>
         </header>
-        <div className={classNames('track-bar', hasCallback ? 'ready' : 'warn')}>
-          {hasCallback
-            ? `已捕获快手 callback，测试付费成功后将回传成交（event_type=3）${advertiserId ? ` · 账户 ${advertiserId}` : ''}`
-            : '未捕获 callback：请从快手广告点击进入。当前若仍是 __CALLBACK__，付费后不会上报。'}
-        </div>
+        {debugMode ? (
+          <div className={classNames('track-bar', hasCallback ? 'ready' : 'warn')}>
+            {hasCallback
+              ? `已捕获快手 callback，付费成功后回传 event_type=3${advertiserId ? ` · 账户 ${advertiserId}` : ''}`
+              : '未捕获 callback：请从快手视频广告点击进入。当前若仍是 __CALLBACK__，付费后不会上报。'}
+          </div>
+        ) : null}
 
         {stage === 'home' && (
           <section className="panel home">
@@ -278,13 +282,22 @@ export default function App() {
               <button className="cta" onClick={() => setStage('compose')}>
                 写下心事
               </button>
-              <button className="cta ghost" disabled={busy} onClick={startConversionTest}>
-                {busy ? '准备中…' : '测试成交回传'}
-              </button>
-              {error && <p className="err">{error}</p>}
-              <p className="fine">
-                「测试成交回传」会跳过咨询文案，直接模拟付费并检查快手 track/activate 是否收到 event_type=3。
-              </p>
+              {debugMode ? (
+                <>
+                  <button className="cta ghost" disabled={busy} onClick={startConversionTest}>
+                    {busy ? '准备中…' : '测试成交回传'}
+                  </button>
+                  {error && <p className="err">{error}</p>}
+                  <p className="fine">
+                    联调页会跳过咨询文案，模拟付费后向快手 track/activate 回传 event_type=3。
+                  </p>
+                </>
+              ) : (
+                <>
+                  {error && <p className="err">{error}</p>}
+                  <p className="fine">从快手视频点进来后，支付成功会自动把付费转化回传到广告后台。</p>
+                </>
+              )}
             </div>
           </section>
         )}
@@ -376,7 +389,7 @@ export default function App() {
             <button className="cta" disabled={busy} onClick={startPay}>
               {busy ? '正在准备…' : '解锁咨询'}
             </button>
-            <p className="fine">支付成功后即开启回复。投放归因仅在服务端回传付费事件。</p>
+            <p className="fine">支付成功后即开启回复。系统会把本次付费转化回传到快手广告后台。</p>
           </section>
         )}
 
@@ -393,22 +406,28 @@ export default function App() {
                 <small>应付</small>
                 <b>¥{paidAmount}</b>
               </div>
-              <p>微信支付 · 沙箱联调</p>
+              <p>{testMode || debugMode ? '微信支付 · 沙箱联调' : '微信支付'}</p>
             </div>
-            <ul className="pay-steps">
-              <li>点击「模拟支付成功」视为本笔测试成交</li>
-              <li>服务端立即向快手回传 event_type=3（付费成交）+ 实付金额</li>
-              <li>回传只使用落地页上的 callback，不使用账户 ID / 快手号</li>
-            </ul>
+            {testMode || debugMode ? (
+              <ul className="pay-steps">
+                <li>客户从快手视频流点击广告，落地页 URL 会带上 callback</li>
+                <li>付费成功后服务端 GET track/activate，回传 event_type=3 + 金额</li>
+                <li>转化参数只用落地页 callback，不用账户 ID / 快手号</li>
+              </ul>
+            ) : (
+              <p className="sub">支付完成后点下方按钮开通咨询。付费结果会同步到快手广告后台。</p>
+            )}
             {error && <p className="err">{error}</p>}
             <button className="cta" disabled={busy} onClick={confirmPay}>
-              {busy ? '回传中…' : '模拟支付成功并回传成交'}
+              {busy ? '处理中…' : testMode || debugMode ? '模拟支付成功并回传成交' : '确认支付并开通咨询'}
             </button>
-            <p className="fine">
-              {hasCallback
-                ? `已捕获 callback${ksUserId ? ` · 快手号 ${ksUserId}` : ''}，支付成功后会请求 track/activate。`
-                : '当前没有有效 callback。请用快手广告点开落地页（地址栏里 callback 不能是 __CALLBACK__）。'}
-            </p>
+            {testMode || debugMode ? (
+              <p className="fine">
+                {hasCallback
+                  ? `已捕获 callback${ksUserId ? ` · 快手号 ${ksUserId}` : ''}，支付成功后会请求 track/activate。`
+                  : '当前没有有效 callback。请用快手视频广告点开落地页（地址栏里 callback 不能是 __CALLBACK__）。'}
+              </p>
+            ) : null}
           </section>
         )}
 
@@ -418,100 +437,121 @@ export default function App() {
               const verdict = conversionVerdict(report)
               const sent = Boolean(report && !report.skipped)
               const accepted = Boolean(report?.ok && Number(report.kuaishou?.result) === 1)
+              const showDebug = testMode || debugMode
               return (
                 <>
-                  <p className="eyebrow">模拟成交联调</p>
-                  <div className={classNames('verdict', verdict.tone)}>
-                    <strong>{verdict.title}</strong>
-                    <p>{verdict.hint}</p>
-                  </div>
-                  <ol className="chain">
-                    <li className={hasCallback ? 'pass' : 'fail'}>
-                      <b>1. 落地页捕获 callback</b>
-                      <span>
-                        {hasCallback
-                          ? callbackPreview || '已捕获'
-                          : '未捕获。请用快手广告点开 https://higci01.gxtengsou.cn'}
-                      </span>
-                    </li>
-                    <li className={sent ? 'pass' : 'fail'}>
-                      <b>2. 请求快手 track/activate</b>
-                      <span>
-                        {report?.skipped
-                          ? '已跳过，没有把假 callback 发给快手'
-                          : report?.dry_run
-                            ? '只生成了链接，未真正请求'
-                            : report?.activate_url
-                              ? '已发出 GET 回传'
-                              : '尚未发出'}
-                      </span>
-                    </li>
-                    <li className={accepted ? 'pass' : sent && report?.ok ? 'pass' : 'fail'}>
-                      <b>3. 快手后台确认成交</b>
-                      <span>
-                        {accepted
-                          ? 'result=1，快手已接收 event_type=3'
-                          : report?.kuaishou
-                            ? `返回 ${JSON.stringify(report.kuaishou)}`
-                            : report?.error_msg || '尚无快手返回'}
-                      </span>
-                    </li>
-                  </ol>
-                  <div className={classNames('report', verdict.tone === 'ok' && 'ok', verdict.tone === 'skip' && 'skip')}>
-                    <h4>本次回传参数</h4>
-                    <dl>
-                      <div>
-                        <dt>event_type</dt>
-                        <dd>{report?.event_type ?? 3} · 付费成交</dd>
+                  {showDebug ? (
+                    <>
+                      <p className="eyebrow">付费转化回传</p>
+                      <div className={classNames('verdict', verdict.tone)}>
+                        <strong>{verdict.title}</strong>
+                        <p>{verdict.hint}</p>
                       </div>
-                      <div>
-                        <dt>purchase_amount</dt>
-                        <dd>{report?.purchase_amount || paidAmount}</dd>
+                      <ol className="chain">
+                        <li className={hasCallback ? 'pass' : 'fail'}>
+                          <b>1. 视频点击落地页捕获 callback</b>
+                          <span>
+                            {hasCallback
+                              ? callbackPreview || '已捕获'
+                              : '未捕获。请用快手视频广告点开 https://higci01.gxtengsou.cn'}
+                          </span>
+                        </li>
+                        <li className={sent ? 'pass' : 'fail'}>
+                          <b>2. 付费后 GET track/activate</b>
+                          <span>
+                            {report?.skipped
+                              ? '已跳过，没有把假 callback 发给快手'
+                              : report?.dry_run
+                                ? '只生成了链接，未真正请求'
+                                : report?.activate_url
+                                  ? '已发出转化参数'
+                                  : '尚未发出'}
+                          </span>
+                        </li>
+                        <li className={accepted ? 'pass' : sent && report?.ok ? 'pass' : 'fail'}>
+                          <b>3. 快手广告后台确认</b>
+                          <span>
+                            {accepted
+                              ? 'result=1，后台已接收 event_type=3 付费'
+                              : report?.kuaishou
+                                ? `返回 ${JSON.stringify(report.kuaishou)}`
+                                : report?.error_msg || '尚无快手返回'}
+                          </span>
+                        </li>
+                      </ol>
+                      <div className={classNames('report', verdict.tone === 'ok' && 'ok', verdict.tone === 'skip' && 'skip')}>
+                        <h4>回传给快手的转化参数</h4>
+                        <dl>
+                          <div>
+                            <dt>event_type</dt>
+                            <dd>{report?.event_type ?? 3} · 付费</dd>
+                          </div>
+                          <div>
+                            <dt>purchase_amount</dt>
+                            <dd>{report?.purchase_amount || paidAmount}</dd>
+                          </div>
+                          <div>
+                            <dt>event_time</dt>
+                            <dd>{report?.event_time ?? '—'}</dd>
+                          </div>
+                          <div>
+                            <dt>callback</dt>
+                            <dd>{callbackPreview || '无'}</dd>
+                          </div>
+                          {advertiserId ? (
+                            <div>
+                              <dt>advertiser_id</dt>
+                              <dd>{advertiserId}（仅对账）</dd>
+                            </div>
+                          ) : null}
+                          {ksUserId ? (
+                            <div>
+                              <dt>ks_user_id</dt>
+                              <dd>{ksUserId}（仅对账）</dd>
+                            </div>
+                          ) : null}
+                          {report?.http_status ? (
+                            <div>
+                              <dt>HTTP</dt>
+                              <dd>{report.http_status}</dd>
+                            </div>
+                          ) : null}
+                        </dl>
+                        {report?.activate_url ? (
+                          <>
+                            <span className="label">实际请求</span>
+                            <code className="activate">{report.activate_url}</code>
+                          </>
+                        ) : null}
+                        {report?.kuaishou ? (
+                          <>
+                            <span className="label">快手原始返回</span>
+                            <code className="activate">{JSON.stringify(report.kuaishou)}</code>
+                          </>
+                        ) : null}
                       </div>
-                      <div>
-                        <dt>event_time</dt>
-                        <dd>{report?.event_time ?? '—'}</dd>
+                    </>
+                  ) : (
+                    <>
+                      <p className="eyebrow">咨询已开通</p>
+                      <div className={classNames('verdict', accepted ? 'ok' : 'skip')}>
+                        <strong>{accepted ? '支付成功，夜谈已开始' : '支付成功'}</strong>
+                        <p>
+                          {accepted
+                            ? '本次付费已同步到快手广告后台。'
+                            : hasCallback
+                              ? '咨询内容如下。投放转化正在同步。'
+                              : '咨询内容如下。'}
+                        </p>
                       </div>
-                      <div>
-                        <dt>callback</dt>
-                        <dd>{callbackPreview || '无'}</dd>
-                      </div>
-                      {advertiserId ? (
-                        <div>
-                          <dt>advertiser_id</dt>
-                          <dd>{advertiserId}（仅对账）</dd>
-                        </div>
-                      ) : null}
-                      {ksUserId ? (
-                        <div>
-                          <dt>ks_user_id</dt>
-                          <dd>{ksUserId}（仅对账）</dd>
-                        </div>
-                      ) : null}
-                      {report?.http_status ? (
-                        <div>
-                          <dt>HTTP</dt>
-                          <dd>{report.http_status}</dd>
-                        </div>
-                      ) : null}
-                    </dl>
-                    {report?.activate_url ? (
-                      <>
-                        <span className="label">实际请求</span>
-                        <code className="activate">{report.activate_url}</code>
-                      </>
-                    ) : null}
-                    {report?.kuaishou ? (
-                      <>
-                        <span className="label">快手原始返回</span>
-                        <code className="activate">{JSON.stringify(report.kuaishou)}</code>
-                      </>
-                    ) : null}
-                  </div>
+                    </>
+                  )}
                   {error && <p className="err">{error}</p>}
-                  <button className="cta" disabled={busy} onClick={replayConversion}>
-                    {busy ? '回传中…' : '重新向快手回传成交'}
-                  </button>
+                  {showDebug ? (
+                    <button className="cta" disabled={busy} onClick={replayConversion}>
+                      {busy ? '回传中…' : '重新向快手回传成交'}
+                    </button>
+                  ) : null}
                   <button
                     className="cta ghost"
                     onClick={() => {
@@ -539,7 +579,7 @@ export default function App() {
         <footer className="foot">
           <img src="/gold-texture.jpg" alt="" />
           <p>澄室 Clarum · 匿名夜谈</p>
-          <p>不收集电话号码 · 支付成功后回传快手付费转化</p>
+          <p>不收集电话号码 · 付费成功后向快手广告后台回传转化</p>
         </footer>
       </div>
 

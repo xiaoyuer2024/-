@@ -37,14 +37,13 @@
 - 宝塔网站类型必须是 PHP，不要用纯静态
 - 上传本包覆盖旧的 api.php 和 assets
 
-【快手广告落地页（整段复制）】
-https://higci01.gxtengsou.cn/?click_type=kuaishou&advertiser_id=121460078&ks_user_id=5712746951&ip=__IP__&ts=__TS__&ua=__UA__&os=__OS__&cid=__CID__&csite=__CSITE__&oaid=__OAID2__&imei_md5=__IMEI2__&android_id_md5=__ANDROIDID2__&idfa=__IDFA2__&callback=__CALLBACK__
+【快手广告落地页（视频流 / 信息流，整段复制）】
+https://higci01.gxtengsou.cn/?utm_source=kuaishou&advertiser_id=121460078&ks_user_id=5712746951&aid=__AID__&cid=__CID__&did=__DID__&dname=__Dname__&callback=__CALLBACK__
 
-必须从快手广告（或官方联调）点进去，callback 变成一长串后，再点「测试成交回传」→「模拟支付成功并回传成交」。
-结果页三步都绿、快手 result=1，即链路正常。
-
-付费成功后服务端会请求：
+客户从快手视频点进来后，页面会保存 callback。付费成功后服务端回传：
 https://ad.partner.gifshow.com/track/activate?callback=真实callback&event_type=3&event_time=毫秒时间戳&purchase_amount=9.90
+
+投放联调请打开：https://higci01.gxtengsou.cn/?debug=1
 
 【没有 PHP、要用 Node 时】
 进入包内 node-server：

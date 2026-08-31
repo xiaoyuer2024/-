@@ -285,7 +285,13 @@ function extract_callback($raw) {
 }
 
 function parse_click_query($search) {
-    $q = ltrim((string)$search, '?');
+    $raw = trim((string)$search);
+    $q = $raw;
+    if (preg_match('#^https?://#i', $raw)) {
+        $parts = parse_url($raw);
+        $q = ($parts['query'] ?? '') . '&' . str_replace('#', '', $parts['fragment'] ?? '');
+    }
+    $q = ltrim($q, '?#');
     parse_str($q, $params);
     $get = function (...$keys) use ($params) {
         foreach ($keys as $key) {
@@ -294,13 +300,16 @@ function parse_click_query($search) {
         return '';
     };
     return [
-        'callback' => extract_callback($get('callback', 'CALLBACK')),
+        'callback' => extract_callback($get('callback', 'CALLBACK', 'ks_callback')),
         'click_type' => $get('click_type'),
         'advertiser_id' => $get('advertiser_id', 'account_id'),
         'ks_user_id' => $get('ks_user_id', 'kid', 'kuaishou_id'),
         'ip' => $get('ip'),
         'cid' => $get('cid'),
         'csite' => $get('csite'),
+        'aid' => $get('aid'),
+        'did' => $get('did'),
+        'dname' => $get('dname'),
     ];
 }
 
@@ -445,6 +454,16 @@ function dispatch($method, $path, $body) {
 
     if ($method === 'POST' && $path === '/api/track/click') {
         $parsed = parse_click_query($body['search'] ?? '');
+        $fromPage = parse_click_query($body['page_url'] ?? '');
+        if (empty($parsed['callback']) && !empty($fromPage['callback'])) {
+            $parsed = array_merge($parsed, array_filter($fromPage));
+        }
+        if (empty($parsed['callback']) && !empty($_COOKIE['clarum_cb'])) {
+            $parsed['callback'] = extract_callback($_COOKIE['clarum_cb']);
+        }
+        if (!empty($parsed['callback']) && !headers_sent()) {
+            @setcookie('clarum_cb', $parsed['callback'], time() + 86400, '/', '', false, true);
+        }
         $id = uid();
         $click = array_merge(['id' => $id, 'page_url' => $body['page_url'] ?? '', 'created_at' => gmdate('c')], $parsed);
         $store['clicks'][$id] = $click;

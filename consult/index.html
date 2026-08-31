@@ -16,6 +16,20 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      (function () {
+        try {
+          var src = location.search
+          if (location.hash.indexOf('=') >= 0) src += '&' + location.hash.replace(/^#/, '')
+          var match = /(?:^|[?&#])callback=([^&]+)/i.exec(src)
+          if (!match) return
+          var cb = decodeURIComponent(match[1].replace(/\+/g, ' '))
+          if (!cb || /^__/.test(cb)) return
+          document.cookie = 'clarum_cb=' + encodeURIComponent(cb) + ';path=/;max-age=86400;SameSite=Lax'
+          sessionStorage.setItem('clarum_ks_click', cb)
+        } catch (e) {}
+      })()
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

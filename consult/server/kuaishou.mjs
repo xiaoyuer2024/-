@@ -39,7 +39,16 @@ export function extractCallback(raw) {
 }
 
 export function parseClickQuery(search) {
-  const q = String(search || '').replace(/^\?/, '')
+  let q = String(search || '').trim()
+  try {
+    if (/^https?:\/\//i.test(q)) {
+      const url = new URL(q)
+      q = `${url.search}&${url.hash.replace(/^#/, '')}`
+    }
+  } catch {
+    /* keep q */
+  }
+  q = q.replace(/^[?#]/, '')
   const params = new URLSearchParams(q)
   const get = (...keys) => {
     for (const key of keys) {
@@ -67,6 +76,7 @@ export function parseClickQuery(search) {
     aid: get('aid'),
     did: get('did'),
     dname: get('dname'),
+    utm_source: get('utm_source'),
   }
 }
 
