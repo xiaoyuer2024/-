@@ -250,7 +250,7 @@ app.post('/api/orders/:id/replay-kuaishou', async (req, res) => {
 if (process.env.NODE_ENV === 'production') {
   const dist = join(root, 'dist')
   app.use(express.static(dist))
-  app.get('*', (_req, res) => {
+  app.get('/{*path}', (_req, res) => {
     res.sendFile(join(dist, 'index.html'))
   })
 }
